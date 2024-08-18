@@ -6,11 +6,14 @@ MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Noam Goldgraber");
 MODULE_DESCRIPTION("Registers a device which allows user to send packet through.");
 
-int init_module(void) {
+static int __init ModuleInit(void) {
     printk(KERN_INFO "UDP Module Initiating!\n");
     return 0;
 }
 
-void cleanup_module(void) {
+static void __exit ModuleExit(void) {
     printk(KERN_INFO "UDP Module cleaned-up!\n");
 }
+
+module_init(ModuleInit);
+module_exit(ModuleExit);
