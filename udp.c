@@ -1,10 +1,20 @@
+#include <linux/in.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/fs.h>
 #include <linux/cdev.h>
 #include <linux/uaccess.h>
+#include <linux/socket.h>
+#include <linux/net.h>
+#include <linux/ip.h>
+#include <linux/in.h>
+#include <linux/netdevice.h>
+#include <linux/fs.h>
 
+#define DEFAULT_PORT 10001
+#define CONNECT_PORT 10002
+#define INADDR_SEND (0xac1fb03c) /* My host IP */
 #define MAJOR_NR (27)
 #define MINOR_NR (01)
 #define MTU (1500)
@@ -52,7 +62,85 @@ static struct file_operations fops = {
 	.write = device_write
 };
 
+struct mymsghdr {
+    void *msg_name;		/* Address to send to/receive from.  */
+    size_t msg_namelen;	/* Length of address data.  */
+
+    struct iovec *msg_iov;	/* Vector of data to send/receive into.  */
+    size_t msg_iovlen;		/* Number of elements in the vector.  */
+
+    void *msg_control;		/* Ancillary data (eg BSD filedesc passing). */
+    size_t msg_controllen;	/* Ancillary data buffer length.
+				   !! The type should be socklen_t but the
+				   definition of the kernel is incompatible
+				   with this.  */
+
+    int msg_flags;		/* Flags on received message.  */
+  };
+
+int ksocket_send(struct socket *sock, struct sockaddr_in *addr, unsigned char *buf, int len)
+{
+        struct mymsghdr msg;
+        struct iovec iov;
+        int size = 0;
+
+        if (sock->sk == NULL) {
+           return 0;
+		}
+
+        iov.iov_base = buf;
+        iov.iov_len = len;
+
+        msg.msg_flags = 0;
+        msg.msg_name = addr;
+        msg.msg_namelen  = sizeof(struct sockaddr_in);
+        msg.msg_control = NULL;
+        msg.msg_controllen = 0;
+        msg.msg_iov = &iov;
+        msg.msg_iovlen = 1;
+
+        // -- Now leads to WSL panic -- size = sock_sendmsg(sock,(struct msghdr *)&msg);
+
+        return size;
+}
+
+static void send_udp_message(void) {
+	// creating socket and binding
+	struct socket* sock;
+	struct socket* sock_send;
+	sock_create(AF_INET, SOCK_DGRAM, IPPROTO_UDP, &sock);
+	sock_create(AF_INET, SOCK_DGRAM, IPPROTO_UDP, &sock_send);
+	printk("Sock is %lu\n", (unsigned long)sock);
+
+	char buf[10] = "Hello!\n";
+	int len = 10;
+	struct sockaddr_in addr, addr_send;
+
+	addr.sin_family = AF_INET;
+	addr_send.sin_addr.s_addr = htonl(INADDR_SEND);
+
+	addr.sin_addr.s_addr = htonl(INADDR_ANY);
+	addr_send.sin_addr.s_addr = htonl(INADDR_SEND);
+
+	addr.sin_port = htons(DEFAULT_PORT);
+	addr_send.sin_port = htons(CONNECT_PORT);
+
+	sock->ops->bind(sock, (struct sockaddr *)&addr, sizeof(struct sockaddr));
+
+	sock_send->ops->connect(sock_send, (struct sockaddr *)&addr_send, sizeof(struct sockaddr), 0);
+
+	printk("Listening on port %d\n", DEFAULT_PORT);
+
+	ksocket_send(sock_send, &addr_send, buf, len);
+
+	sock_release(sock);
+	sock_release(sock_send);
+	sock = 0;
+}
+
 static int __init ModuleInit(void) {
+	send_udp_message();
+
     printk(KERN_INFO "UDP Module Initiating!\n");
 
 	/* Allocating device nr*/
